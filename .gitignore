@@ -1,11 +1,4 @@
 build/
-cmake-build-debug/
-cmake-build-release/
+main
+main_test
 *.o
-*.a
-*.so
-*.out
-.vscode/
-.idea/
-*.swp
-*.log
