@@ -1,47 +1,42 @@
 #pragma once
 
-#include <cstddef>   //size_t
-#include <cstdint>   //uint32_t
-#include <sys/mman.h> //mmap
+#include <cstddef>    // size_t
+#include <cstdint>    // uint32_t
+#include <sys/mman.h> // mmap
 
-//SIZE CLASSES
-//These 7 sizes and anything above 512 bytes goes directly to mmap
-
+// 7 slab size classes.
+// Requests larger than 512 bytes go directly to mmap.
 static constexpr int NUM_SIZE_CLASSES = 7;
 
-//The actual byte sizes
-static constexpr size_t SIZE_CLASSES[NUM_SIZE_CLASSES]={
+static constexpr size_t SIZE_CLASSES[NUM_SIZE_CLASSES] = {
     8, 16, 32, 64, 128, 256, 512
 };
 
-static constexpr size_t SLAB_SIZE = 2*1024*1024; 
+static constexpr size_t SLAB_SIZE = 2 * 1024 * 1024; // 2 MB
 
-//Free slots are linked together.
-//When a slot is allocated, the user overwrites this memory.
+// Node used to link free slots inside a slab.
 struct FreeSlot {
-    FreeSlot* next;  //points to next free slot, null if last
+    FreeSlot* next;
 };
 
-// Metadata for a single slab.
-// Lives at the start of the 2 MB region.
+// Metadata stored at the beginning of each slab.
 struct SlabHeader {
-    size_t      obj_size;    //size of each slot in this slab
-    uint32_t    total_slots; //how many slots were carved at creation
-    uint32_t    free_slots;  //how many slots are currently free
-    FreeSlot*   free_list;   //head of the free slot linked list
-    SlabHeader* next_slab;   //next slab of the same size class
-                             //(when this slab fills up, we chain a new one here)
+    size_t      obj_size;     // size of each slot in this slab
+    uint32_t    total_slots;  // total number of slots in the slab
+    uint32_t    free_slots;   // currently available slots
+    FreeSlot*   free_list;    // head of free-list
+    SlabHeader* next_slab;    // next slab in the same size class
 };
 
-//Find the first size class that can fit size
-//Returns -1 if the request is too large for slabs
-int  get_size_class(size_t size);
+// Returns the first size class that can fit 'size'.
+// Returns -1 if the request is too large for slabs.
+int get_size_class(size_t size);
 
-//Create a new slab and build its free list
+// Creates a new slab for a given object size and builds its free list.
 SlabHeader* create_slab(size_t obj_size);
 
-//Allocate one slot from the slab chain
+// Allocates one slot from the slab chain.
 void* slab_alloc(SlabHeader*& slab_chain);
 
-//Free a slot back into the correct slab
-void  slab_free(void* ptr, size_t obj_size);
+// Frees a slot back to the correct slab in the chain.
+void slab_free(void* ptr, SlabHeader* slab_chain);
