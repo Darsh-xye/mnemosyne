@@ -102,9 +102,30 @@ Large objects bypass the slab allocator and are allocated directly using `mmap`.
 
 ---
 
+# Build
+
+```bash
+mkdir build
+cd build
+cmake ..
+make
+```
+
+---
+
+# Run
+
+```bash
+./test_slab      # Correctness tests
+./test_threads   # Multithreaded tests
+./bench          # Benchmark against glibc malloc
+```
+
+---
+
 # Benchmark
 
-Mnemosyne was benchmarked against the system **glibc `malloc/free`** allocator.
+Mnemosyne was benchmarked against the system **glibc `malloc/free`** allocator across multiple allocation patterns.
 
 ### Best Result
 
@@ -116,14 +137,14 @@ Mnemosyne was benchmarked against the system **glibc `malloc/free`** allocator.
 
 The improvement comes from slab allocation, constant-time free-list operations, and efficient object reuse.
 
-For other small-object allocation workloads, Mnemosyne delivered competitive performance for its intended educational scope. Large allocations are slower because they directly invoke `mmap`, which is a known design trade-off of the current implementation.
+Across the remaining benchmark scenarios—including fixed-size, varied-size, multithreaded, and large allocations—**glibc outperformed Mnemosyne**. These results reflect the maturity of highly optimized production allocators and the current scope of this educational implementation.
 
 ---
 
 # Example
 
 ```cpp
-#include "mnemosyne.h"
+#include "allocator.h"
 
 struct Node {
     int x, y;
@@ -132,12 +153,15 @@ struct Node {
 };
 
 int main() {
-    void* p = mnemosyne::alloc(64);
-    mnemosyne::free(p, 64);
+    ma::init();
 
-    auto* node = mnemosyne::make<Node>(1, 2);
-    mnemosyne::destroy(node);
+    void* p = ma::alloc(64);
+    ma::free(p, 64);
 
+    auto* node = ma::make<Node>(1, 2);
+    ma::destroy(node);
+
+    ma::shutdown();
     return 0;
 }
 ```
@@ -153,6 +177,9 @@ This project was developed with guidance from the following papers and documenta
 
 - **Bonwick & Adams (2001)** — *Magazines and Vmem*  
   https://www.usenix.org/legacy/event/usenix01/full_papers/bonwick/bonwick.pdf
+
+- **Google** — *TCMalloc Design Documentation*  
+  https://google.github.io/tcmalloc/design.html
 
 - **Evans (2006)** — *A Scalable Concurrent malloc(3) Implementation for FreeBSD (jemalloc)*  
   https://people.freebsd.org/~jasone/jemalloc/bsdcan2006/jemalloc.pdf
