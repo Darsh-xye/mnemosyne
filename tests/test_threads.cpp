@@ -5,9 +5,6 @@
 #include <cassert>
 #include <atomic>
 
-using namespace std;
-
-// Repeated alloc/free from multiple threads.
 void worker_basic(int thread_id, int iterations) {
     for (int i = 0; i < iterations; i++) {
         void* p = ma::alloc(32);
@@ -20,18 +17,17 @@ void test_concurrent_alloc_free() {
     const int NUM_THREADS = 8;
     const int ITERATIONS  = 50000;
 
-    vector<thread> threads;
+    std::vector<std::thread> threads;
     for (int i = 0; i < NUM_THREADS; i++) {
         threads.emplace_back(worker_basic, i, ITERATIONS);
     }
     for (auto& t : threads) t.join();
 
-    cout << "PASS" << NUM_THREADS << " threads x "
-         << ITERATIONS << " alloc/free each, no crash\n";
+    std::cout << "[PASS] " << NUM_THREADS << " threads x "
+              << ITERATIONS << " alloc/free each, no crash\n";
 }
 
-// Allocate in worker threads, free later from another thread.
-void worker_hold_then_free(vector<void*>& out, int count) {
+void worker_hold_then_free(std::vector<void*>& out, int count) {
     for (int i = 0; i < count; i++) {
         void* p = ma::alloc(64);
         assert(p != nullptr);
@@ -43,11 +39,11 @@ void test_hold_then_free() {
     const int NUM_THREADS = 8;
     const int COUNT       = 10000;
 
-    vector<vector<void*>> all_ptrs(NUM_THREADS);
-    vector<thread> threads;
+    std::vector<std::vector<void*>> all_ptrs(NUM_THREADS);
+    std::vector<std::thread> threads;
 
     for (int i = 0; i < NUM_THREADS; i++) {
-        threads.emplace_back(worker_hold_then_free, ref(all_ptrs[i]), COUNT);
+        threads.emplace_back(worker_hold_then_free, std::ref(all_ptrs[i]), COUNT);
     }
     for (auto& t : threads) t.join();
 
@@ -57,10 +53,9 @@ void test_hold_then_free() {
         }
     }
 
-    cout<<"PASS - hold then free across threads\n";
+    std::cout << "[PASS] hold-then-free across threads\n";
 }
 
-// Stress different size classes concurrently.
 void worker_mixed_sizes(int iterations) {
     size_t sizes[] = {8, 32, 64, 128, 256, 512};
     for (int i = 0; i < iterations; i++) {
@@ -75,16 +70,15 @@ void test_mixed_sizes_concurrent() {
     const int NUM_THREADS = 8;
     const int ITERATIONS  = 20000;
 
-    vector<thread> threads;
+    std::vector<std::thread> threads;
     for (int i = 0; i < NUM_THREADS; i++) {
         threads.emplace_back(worker_mixed_sizes, ITERATIONS);
     }
     for (auto& t : threads) t.join();
 
-    cout<<"PASS - mixed size classes across " << NUM_THREADS << " threads\n";
+    std::cout << "[PASS] mixed size classes across " << NUM_THREADS << " threads\n";
 }
 
-// Put pressure on the slab refill slow path.
 void worker_stress_refill(int iterations) {
     for (int i = 0; i < iterations; i++) {
         void* p = ma::alloc(128);
@@ -97,16 +91,15 @@ void test_stress_slab_refill() {
     const int NUM_THREADS = 16;
     const int ITERATIONS  = 5000;
 
-    vector<thread> threads;
+    std::vector<std::thread> threads;
     for (int i = 0; i < NUM_THREADS; i++) {
         threads.emplace_back(worker_stress_refill, ITERATIONS);
     }
     for (auto& t : threads) t.join();
 
-    cout << "PASS - stress test on mutex protected slab refill path\n";
+    std::cout << "[PASS] stress test on mutex-protected slab refill path\n";
 }
 
-// Stress large allocations that bypass slabs.
 void worker_large_alloc(int iterations) {
     for (int i = 0; i < iterations; i++) {
         void* p = ma::alloc(4096);
@@ -119,13 +112,13 @@ void test_concurrent_large_alloc() {
     const int NUM_THREADS = 8;
     const int ITERATIONS  = 2000;
 
-    vector<thread> threads;
+    std::vector<std::thread> threads;
     for (int i = 0; i < NUM_THREADS; i++) {
         threads.emplace_back(worker_large_alloc, ITERATIONS);
     }
     for (auto& t : threads) t.join();
 
-    cout <<"PASS- concurrent large (mmap-direct) allocations\n";
+    std::cout << "[PASS] concurrent large (mmap-direct) allocations\n";
 }
 
 int main() {
@@ -139,6 +132,6 @@ int main() {
 
     ma::shutdown();
 
-    cout << "\nALL THREAD TESTS PASSED\n";
+    std::cout << "\nALL THREAD TESTS PASSED\n";
     return 0;
 }

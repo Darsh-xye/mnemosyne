@@ -28,15 +28,12 @@ struct SlabHeader {
     SlabHeader* next_slab;    // next slab in the same size class
 };
 
-// Returns the first size class that can fit 'size'.
 // Returns -1 if the request is too large for slabs.
 int get_size_class(size_t size);
 
 // Creates a new slab for a given object size and builds its free list.
 SlabHeader* create_slab(size_t obj_size);
 
-// Allocates one slot from the slab chain.
-void* slab_alloc(SlabHeader*& slab_chain);
+void* slab_alloc(SlabHeader*& slab_chain); // Allocates one slot from the slab chain.
 
-// Frees a slot back to the correct slab in the chain.
-void slab_free(void* ptr, SlabHeader* slab_chain);
+void slab_free(void* ptr, SlabHeader* slab_chain); // Frees a slot back to the correct slab in the chain.

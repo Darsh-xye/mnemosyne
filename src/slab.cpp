@@ -10,15 +10,12 @@ int get_size_class(size_t size) {
     }
     return -1; 
 }
-
 /*
 Creates a new slab for a size class when no free slots remain.
 
 Allocates SLAB_SIZE bytes with mmap, sets up the slab header,
 splits the rest into slots, and links them into the free list.
 */
-
-
 SlabHeader* create_slab(size_t obj_size) {
     // Asking OS for 2mb of anonymous memory
     // MAP_ANONYMOUS = not backed by any file, just raw memory

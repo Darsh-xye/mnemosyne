@@ -5,17 +5,17 @@
 #include <utility>
 #include <new>
 
-namespace ma {  // "ma" = memory allocator, change later if you rename project
+namespace ma {
 
+    //Reset allocator state / counters.
     void init();
     void shutdown();
 
-    // Raw allocation
+    //Raw allocation API.
     void* alloc(size_t size);
     void  free(void* ptr, size_t size);
 
-    // Typed allocation, placement new wrapper
-    // Size is deduced automatically from T, so the user never has to pass it
+    //Allocate memory for T and construct it in place.
     template<typename T, typename... Args>
     T* make(Args&&... args) {
         void* mem = alloc(sizeof(T));
@@ -23,6 +23,7 @@ namespace ma {  // "ma" = memory allocator, change later if you rename project
         return new (mem) T(std::forward<Args>(args)...);
     }
 
+    //Destroy T and return its memory to the allocator.
     template<typename T>
     void destroy(T* ptr) {
         if (!ptr) return;
@@ -30,7 +31,7 @@ namespace ma {  // "ma" = memory allocator, change later if you rename project
         free((void*)ptr, sizeof(T));
     }
 
-    //  Debug stats
+    //Print allocator stats.
     void dump_stats();
 
 } 
