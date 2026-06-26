@@ -1,84 +1,77 @@
 # Mnemosyne
 ### A slab-based memory allocator with thread-local caching for multithreaded small-object allocation in C++
 
-Mnemosyne is a custom **C++17 memory allocator** built for efficient **small-object allocation**. It combines a **size-class slab allocator** with **thread-local caches** to reduce allocation overhead, improve memory reuse, and scale better under **multithreaded / concurrent allocation workloads**.
+Mnemosyne is a custom **C++17 memory allocator** for efficient **small-object allocation**. It combines a **size-class slab allocator** with **thread-local caches** to reduce allocation overhead, improve memory reuse, and scale under concurrent workloads.
 
-The allocator currently manages allocations up to **512 bytes** using **mmap-backed slabs**, **intrusive free lists**, and **per-thread free lists**. Requests larger than 512 bytes bypass the slab layer and are handled directly through `mmap`.
+Allocations up to **512 bytes** are served from **2 MB mmap-backed slabs** using intrusive free lists and per-thread caches. Larger allocations bypass the slab allocator and are handled directly with `mmap`.
 
 ---
 
 ## Highlights
 
-- **Slab-based small-object allocator** in **C++17**
-- **7 size classes**: `8, 16, 32, 64, 128, 256, 512`
-- **2 MB slabs** acquired via `mmap`
-- **Intrusive free-list slot management** for O(1) allocation/deallocation
-- **Thread-local caches** for low-contention fast-path allocation
-- **Shared central refill path** for multithreaded allocation workloads
-- **Direct mmap path** for allocations larger than `512 B`
-- **Typed allocation helpers** such as `make<T>()` / `destroy<T>()`
+- Slab-based allocator in **C++17**
+- **7 size classes:** `8, 16, 32, 64, 128, 256, 512`
+- **2 MB mmap-backed slabs**
+- O(1) allocation/deallocation using intrusive free lists
+- Thread-local caches for fast-path allocation
+- Shared central refill path
+- Direct `mmap` for allocations larger than `512 B`
+- Typed allocation helpers (`make<T>()` / `destroy<T>()`)
 
 ---
 
 # Motivation
 
-Mnemosyne was built to explore the allocator techniques commonly used to speed up **small, frequent allocations** in systems code:
+Mnemosyne explores techniques used by modern memory allocators to optimize frequent small allocations:
 
-- **size-class slab allocation**
-- **thread-local fast paths**
-- **shared refill paths for multithreaded workloads**
-- **mmap-backed memory management**
-- **reduced allocator contention under concurrency**
+- Size-class slab allocation
+- Thread-local fast paths
+- Shared refill paths
+- `mmap`-backed memory management
+- Reduced contention under concurrency
 
-The project is inspired by design ideas used in allocators such as **jemalloc** and **tcmalloc**, while keeping the implementation compact and easy to study.
+The implementation is intentionally compact while demonstrating techniques used in allocators such as **jemalloc** and **tcmalloc**.
 
 ---
 
 # Architecture
 
-Mnemosyne is built around two core components:
+## Slab Allocator
 
-## 1. Slab allocator
-Small allocations are served through **fixed-size slabs** organized into **7 size classes**:
+Small objects are allocated from **2 MB slabs** divided into seven size classes:
 
-- `8 B`
-- `16 B`
-- `32 B`
-- `64 B`
-- `128 B`
-- `256 B`
-- `512 B`
+`8 B • 16 B • 32 B • 64 B • 128 B • 256 B • 512 B`
 
-Each size class is backed by a **2 MB slab** obtained through `mmap`.  
-Free slots inside a slab are tracked using an **intrusive freelist**.
+Each slab maintains an intrusive free list, enabling constant-time allocation and deallocation.
 
 ---
 
-## 2. Thread-local cache layer
-To improve performance under **multithreaded allocation workloads**, Mnemosyne maintains **per-thread caches** for slab-managed objects.
+## Thread-Local Cache
 
-Typical allocation flow:
+Each thread maintains a local cache to reduce synchronization overhead.
+
+Allocation flow:
 
 1. Round the request to the nearest size class.
-2. Try to allocate from the calling thread’s local cache.
-3. On a cache miss, refill from the **shared central allocator path**.
-4. Return a slot from the local freelist.
+2. Allocate from the thread-local cache.
+3. Refill from the shared central allocator on a cache miss.
+4. Return the allocated object.
 
-This keeps the common allocation path thread-local and reduces contention on shared allocator state.
+This keeps the common allocation path thread-local and minimizes contention.
 
 ---
 
 # Allocation Strategy
 
-## Small allocations (`<= 512 B`)
-Requests up to `512 B` are handled by the slab allocator:
+### Small Allocations (`≤512 B`)
 
-- map size to nearest class
-- allocate from thread-local cache if available
-- otherwise refill from the central slab-backed allocator
+- Round to the nearest size class
+- Allocate from the thread-local cache
+- Refill from the central allocator when needed
 
-## Large allocations (`> 512 B`)
-Requests larger than `512 B` bypass the slab allocator and are served directly via `mmap`.
+### Large Allocations (`>512 B`)
+
+Large objects bypass the slab allocator and are allocated directly using `mmap`.
 
 ---
 
@@ -86,38 +79,55 @@ Requests larger than `512 B` bypass the slab allocator and are served directly v
 
 | Requested Size | Rounded Class | Allocation Path |
 |----------------|---------------|-----------------|
-| `1 - 8`        | `8 B`         | slab / thread cache |
-| `9 - 16`       | `16 B`        | slab / thread cache |
-| `17 - 32`      | `32 B`        | slab / thread cache |
-| `33 - 64`      | `64 B`        | slab / thread cache |
-| `65 - 128`     | `128 B`       | slab / thread cache |
-| `129 - 256`    | `256 B`       | slab / thread cache |
-| `257 - 512`    | `512 B`       | slab / thread cache |
-| `> 512`        | direct        | `mmap` |
+| `1–8 B` | `8 B` | Slab / Thread Cache |
+| `9–16 B` | `16 B` | Slab / Thread Cache |
+| `17–32 B` | `32 B` | Slab / Thread Cache |
+| `33–64 B` | `64 B` | Slab / Thread Cache |
+| `65–128 B` | `128 B` | Slab / Thread Cache |
+| `129–256 B` | `256 B` | Slab / Thread Cache |
+| `257–512 B` | `512 B` | Slab / Thread Cache |
+| `>512 B` | Direct | `mmap` |
 
 ---
 
-# Implemented Features
+# Features
 
-Mnemosyne currently includes:
-
-- **size-class slab allocation** for small objects
-- **2 MB mmap-backed slabs**
-- **intrusive free-list management**
-- **thread-local caches / per-thread free lists**
-- **shared central refill path**
-- **large-object direct mmap path**
-- **typed object allocation helpers**
+- Size-class slab allocation
+- 2 MB `mmap`-backed slabs
+- Intrusive free-list management
+- Thread-local caches
+- Shared central refill path
+- Direct `mmap` for large allocations
+- Typed allocation helpers
 
 ---
 
-# Example API
+# Benchmark
+
+Mnemosyne was benchmarked against the system **glibc `malloc/free`** allocator.
+
+### Best Result
+
+| Workload | glibc | Mnemosyne |
+|----------|------:|----------:|
+| Allocate 500,000 objects, hold, then free | 56.236 ms | **23.334 ms** |
+
+**Result:** **2.41× faster** than glibc for this workload.
+
+The improvement comes from slab allocation, constant-time free-list operations, and efficient object reuse.
+
+For other small-object allocation workloads, Mnemosyne delivered competitive performance for its intended educational scope. Large allocations are slower because they directly invoke `mmap`, which is a known design trade-off of the current implementation.
+
+---
+
+# Example
 
 ```cpp
 #include "mnemosyne.h"
 
 struct Node {
     int x, y;
+
     Node(int a, int b) : x(a), y(b) {}
 };
 
@@ -130,3 +140,25 @@ int main() {
 
     return 0;
 }
+```
+
+---
+
+# References
+
+This project was developed with guidance from the following papers and documentation:
+
+- **Bonwick (1994)** — *The Slab Allocator*  
+  https://www.usenix.org/conference/usenix-summer-1994-technical-conference/slab-allocator-object-caching-kernel
+
+- **Bonwick & Adams (2001)** — *Magazines and Vmem*  
+  https://www.usenix.org/legacy/event/usenix01/full_papers/bonwick/bonwick.pdf
+
+- **Evans (2006)** — *A Scalable Concurrent malloc(3) Implementation for FreeBSD (jemalloc)*  
+  https://people.freebsd.org/~jasone/jemalloc/bsdcan2006/jemalloc.pdf
+
+- **Michael & Scott (1996)** — *Non-Blocking Concurrent Queue Algorithms*  
+  https://www.cs.rochester.edu/u/scott/papers/1996_PODC_queues.pdf
+
+- **glibc Wiki** — *Malloc Internals*  
+  https://sourceware.org/glibc/wiki/MallocInternals
